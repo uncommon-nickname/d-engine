@@ -2,11 +2,12 @@ use std::any::TypeId;
 use std::collections::HashMap;
 
 use crate::components::{ComponentStorage, SparseSet};
+use crate::entity::EntityBuilder;
 
 pub struct World
 {
     size: usize,
-    next_free_entity_id: usize,
+    current_id: usize,
     components: HashMap<TypeId, Box<dyn ComponentStorage>>,
 }
 
@@ -16,37 +17,53 @@ impl World
     {
         Self {
             size,
-            next_free_entity_id: 0,
+            current_id: 0,
             components: HashMap::new(),
         }
     }
 
-    pub fn spawn(&mut self) -> usize
+    pub fn spawn(&mut self) -> EntityBuilder<'_>
     {
-        // FIXME: This is `VERY` temporary.
-        // The whole entity creation system should be much better.
-        // A nice abstraction allowing to do this in a single pass would
-        // be very nice.
-        let entity_id = self.next_free_entity_id;
-        self.next_free_entity_id += 1;
+        let spawned_entity_id = self.current_id;
+        self.current_id += 1;
 
-        entity_id
+        EntityBuilder::new(spawned_entity_id, self)
     }
 
-    pub fn create<T: 'static>(&mut self, id: usize, item: T)
+    pub fn despawn(&mut self, id: usize)
     {
-        self.get_storage_mut().map(|storage| storage.add(id, item));
+        self.components
+            .values_mut()
+            .for_each(|components| components.delete(id))
     }
 
     pub fn get<T: 'static>(&self, id: usize) -> Option<&T>
     {
-        self.get_storage().and_then(|storage| storage.get(id))
+        self.get_storage::<T>().and_then(|storage| storage.get(id))
     }
 
     pub fn get_mut<T: 'static>(&mut self, id: usize) -> Option<&mut T>
     {
-        self.get_storage_mut()
+        self.get_storage_mut::<T>()
             .and_then(|storage| storage.get_mut(id))
+    }
+
+    pub(crate) fn get_storage<T: 'static>(&self) -> Option<&SparseSet<T>>
+    {
+        let type_id = TypeId::of::<T>();
+
+        self.components
+            .get(&type_id)
+            .and_then(|components| components.as_any().downcast_ref::<SparseSet<T>>())
+    }
+
+    pub(crate) fn get_storage_mut<T: 'static>(&mut self) -> Option<&mut SparseSet<T>>
+    {
+        let type_id = TypeId::of::<T>();
+
+        self.components
+            .get_mut(&type_id)
+            .and_then(|components| components.as_any_mut().downcast_mut::<SparseSet<T>>())
     }
 
     pub fn register<T: 'static>(mut self) -> Self
@@ -56,26 +73,7 @@ impl World
         self.components
             .entry(type_id)
             .or_insert_with(|| Box::new(SparseSet::<T>::new(self.size)));
-
         self
-    }
-
-    fn get_storage<T: 'static>(&self) -> Option<&SparseSet<T>>
-    {
-        let type_id = TypeId::of::<T>();
-
-        self.components
-            .get(&type_id)
-            .and_then(|components| components.as_any().downcast_ref::<SparseSet<T>>())
-    }
-
-    fn get_storage_mut<T: 'static>(&mut self) -> Option<&mut SparseSet<T>>
-    {
-        let type_id = TypeId::of::<T>();
-
-        self.components
-            .get_mut(&type_id)
-            .and_then(|components| components.as_any_mut().downcast_mut::<SparseSet<T>>())
     }
 }
 
@@ -85,6 +83,115 @@ mod tests
     use super::*;
 
     #[test]
+    #[should_panic]
+    fn spawn_entity_with_unregistered_component()
+    {
+        let mut world = World::new(10);
+        world.spawn().with::<u32>(25).into_id();
+    }
+
+    #[test]
+    fn spawn_entity()
+    {
+        let mut world = World::new(10).register::<u32>().register::<String>();
+
+        let entity_id = world
+            .spawn()
+            .with::<u32>(25)
+            .with::<String>("test".to_string())
+            .into_id();
+
+        let age = world.get::<u32>(entity_id);
+        let name = world.get::<String>(entity_id);
+
+        assert_eq!(age, Some(&25));
+        assert_eq!(name, Some(&"test".to_string()));
+    }
+
+    #[test]
+    fn despawn_entity()
+    {
+        let mut world = World::new(10).register::<u32>().register::<i32>();
+        let entity_id = world.spawn().with::<u32>(25).with::<i32>(-10).into_id();
+
+        world.despawn(entity_id);
+
+        let v1 = world.get::<u32>(entity_id);
+        let v2 = world.get::<i32>(entity_id);
+
+        assert!(v1.is_none());
+        assert!(v2.is_none());
+    }
+
+    #[test]
+    fn get_entity_component_doesnt_exist()
+    {
+        let mut world = World::new(10).register::<u32>().register::<i32>();
+        let entity_id = world.spawn().with::<u32>(25).into_id();
+
+        let value = world.get::<i32>(entity_id);
+
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn get_entity_component_when_not_registered()
+    {
+        let world = World::new(10);
+        let value = world.get::<u32>(0);
+
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn get_entity_component()
+    {
+        let mut world = World::new(10).register::<u32>();
+        let entity_id = world.spawn().with::<u32>(25).into_id();
+
+        let value = world.get::<u32>(entity_id);
+
+        assert_eq!(value, Some(&25));
+    }
+
+    #[test]
+    fn get_mut_entity_component_doesnt_exist()
+    {
+        let mut world = World::new(10).register::<u32>().register::<i32>();
+        let entity_id = world.spawn().with::<u32>(25).into_id();
+
+        let value = world.get_mut::<i32>(entity_id);
+
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn get_mut_entity_component_when_not_registered()
+    {
+        let mut world = World::new(10);
+        let value = world.get_mut::<u32>(0);
+
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn get_mut_entity_component()
+    {
+        let mut world = World::new(10).register::<u32>();
+        let entity_id = world.spawn().with::<u32>(25).into_id();
+
+        let value = world.get_mut::<u32>(entity_id);
+
+        assert_eq!(value, Some(&mut 25));
+
+        *value.unwrap() = 36;
+
+        let value = world.get::<u32>(entity_id);
+
+        assert_eq!(value, Some(&36));
+    }
+
+    #[test]
     fn register_entity_adds_entry_to_components()
     {
         let world = World::new(10).register::<u32>();
@@ -92,22 +199,5 @@ mod tests
 
         assert_eq!(world.components.len(), 1);
         assert_eq!(world.components.contains_key(&key), true);
-    }
-
-    #[test]
-    fn full_entity_creation()
-    {
-        let mut world = World::new(10).register::<u32>().register::<&str>();
-        let entity = world.spawn();
-
-        world.create::<u32>(entity, 25);
-        world.create::<&str>(entity, "name");
-
-        let age = world.get::<u32>(entity);
-        let name = world.get::<&str>(entity);
-
-        assert_eq!(entity, 0);
-        assert_eq!(age, Some(&25));
-        assert_eq!(name, Some(&"name"));
     }
 }
