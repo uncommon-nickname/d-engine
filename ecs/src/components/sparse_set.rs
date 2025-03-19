@@ -1,22 +1,30 @@
-#[derive(Debug)]
-struct Entry<T>
-{
-    id: usize,
-    item: T,
-}
+use std::any::Any;
 
-#[derive(Debug)]
-pub struct SparseSet<T>
+use super::{ComponentStorage, Entry, SparseSet};
+
+impl<T: 'static> ComponentStorage for SparseSet<T>
 {
-    dense: Vec<Entry<T>>,
-    sparse: Vec<Option<usize>>,
+    #[inline]
+    fn as_any(&self) -> &dyn Any
+    {
+        self
+    }
+
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut dyn Any
+    {
+        self
+    }
 }
 
 impl<T> SparseSet<T>
 {
-    pub fn with_size(size: usize) -> Self
+    pub fn new(size: usize) -> Self
     {
-        Self { dense: Vec::with_capacity(size), sparse: vec![None; size] }
+        Self {
+            dense: Vec::with_capacity(size),
+            sparse: vec![None; size],
+        }
     }
 
     pub fn add(&mut self, id: usize, item: T)
@@ -28,6 +36,7 @@ impl<T> SparseSet<T>
         }
 
         let index = Some(self.dense.len());
+
         self.dense.push(Entry { id, item });
         self.sparse[id] = index;
     }
@@ -73,6 +82,11 @@ impl<T> SparseSet<T>
 
         Some(&entry.item)
     }
+
+    pub fn size(&self) -> usize
+    {
+        self.dense.len()
+    }
 }
 
 #[cfg(test)]
@@ -85,7 +99,7 @@ mod tests
     #[should_panic]
     fn crash_when_adding_more_than_capacity_would_fit()
     {
-        let mut set = SparseSet::with_size(1);
+        let mut set = SparseSet::new(1);
 
         set.add(0, 1);
         set.add(1, 2);
@@ -94,7 +108,7 @@ mod tests
     #[test]
     fn add_new_element()
     {
-        let mut set = SparseSet::with_size(10);
+        let mut set = SparseSet::new(10);
 
         set.add(5, 1);
 
@@ -105,7 +119,7 @@ mod tests
     #[test]
     fn add_element_which_already_exists()
     {
-        let mut set = SparseSet::with_size(10);
+        let mut set = SparseSet::new(10);
 
         set.add(5, 1);
         set.add(5, 2);
@@ -117,7 +131,7 @@ mod tests
     #[test]
     fn contains_returns_true_if_id_in_sparse()
     {
-        let mut set = SparseSet::with_size(1);
+        let mut set = SparseSet::new(10);
 
         set.add(0, 1);
 
@@ -127,7 +141,7 @@ mod tests
     #[test]
     fn contains_returns_false_if_id_not_in_sparse()
     {
-        let mut set = SparseSet::with_size(2);
+        let mut set = SparseSet::new(2);
 
         set.add(0, 1);
 
@@ -137,7 +151,7 @@ mod tests
     #[test]
     fn clear_removes_values_from_dense_and_resets_state()
     {
-        let mut set = SparseSet::with_size(2);
+        let mut set = SparseSet::new(10);
 
         set.add(0, 1);
         set.add(1, 2);
@@ -151,7 +165,7 @@ mod tests
     #[test]
     fn delete_does_nothing_when_not_exists()
     {
-        let mut set = SparseSet::with_size(2);
+        let mut set = SparseSet::new(2);
 
         set.add(0, 1);
 
@@ -161,7 +175,7 @@ mod tests
     #[test]
     fn delete_when_only_one_element()
     {
-        let mut set = SparseSet::with_size(10);
+        let mut set = SparseSet::new(10);
 
         set.add(4, 1);
 
@@ -172,7 +186,7 @@ mod tests
     #[test]
     fn delete_swaps_with_last_element()
     {
-        let mut set = SparseSet::with_size(10);
+        let mut set = SparseSet::new(10);
 
         set.add(4, 1);
         set.add(7, 2);
@@ -186,7 +200,7 @@ mod tests
     #[test]
     fn get_mut_returns_null_when_not_present()
     {
-        let mut set = SparseSet::with_size(2);
+        let mut set = SparseSet::new(2);
 
         set.add(0, 1);
 
@@ -196,7 +210,7 @@ mod tests
     #[test]
     fn get_mut_returns_mutable_ref_when_present()
     {
-        let mut set = SparseSet::with_size(1);
+        let mut set = SparseSet::new(1);
 
         set.add(0, 1);
 
@@ -206,7 +220,7 @@ mod tests
     #[test]
     fn get_returns_null_when_not_present()
     {
-        let mut set = SparseSet::with_size(2);
+        let mut set = SparseSet::new(2);
 
         set.add(0, 1);
 
@@ -216,10 +230,21 @@ mod tests
     #[test]
     fn get_returns_ref_when_present()
     {
-        let mut set = SparseSet::with_size(1);
+        let mut set = SparseSet::new(1);
 
         set.add(0, 1);
 
         assert_eq!(*set.get(0).unwrap(), 1);
+    }
+
+    #[test]
+    fn size_returns_current_set_size()
+    {
+        let mut set = SparseSet::new(10);
+
+        set.add(0, 1);
+        set.add(1, 2);
+
+        assert_eq!(set.size(), 2);
     }
 }
