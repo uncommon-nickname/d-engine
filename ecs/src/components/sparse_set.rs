@@ -15,6 +15,21 @@ impl<T: 'static> ComponentStorage for SparseSet<T>
     {
         self
     }
+
+    fn delete(&mut self, id: usize)
+    {
+        if let Some(index) = self.sparse[id]
+        {
+            self.dense.swap_remove(index);
+
+            if index < self.dense.len()
+            {
+                let moved = &self.dense[index];
+                self.sparse[moved.id] = Some(index);
+            }
+            self.sparse[id] = None;
+        }
+    }
 }
 
 impl<T> SparseSet<T>
@@ -50,21 +65,6 @@ impl<T> SparseSet<T>
     {
         self.dense.clear();
         self.sparse.fill(None);
-    }
-
-    pub fn delete(&mut self, id: usize) -> Option<T>
-    {
-        let index = self.sparse[id]?;
-        let removed = self.dense.swap_remove(index);
-
-        if index < self.dense.len()
-        {
-            let moved = &self.dense[index];
-            self.sparse[moved.id] = Some(index);
-        }
-
-        self.sparse[id] = None;
-        Some(removed.item)
     }
 
     pub fn get_mut(&mut self, id: usize) -> Option<&mut T>
@@ -168,8 +168,9 @@ mod tests
         let mut set = SparseSet::new(2);
 
         set.add(0, 1);
+        set.delete(1);
 
-        assert_eq!(set.delete(1).is_none(), true);
+        assert_eq!(set.contains(0), true);
     }
 
     #[test]
@@ -178,8 +179,8 @@ mod tests
         let mut set = SparseSet::new(10);
 
         set.add(4, 1);
+        set.delete(4);
 
-        assert_eq!(set.delete(4).unwrap(), 1);
         assert_eq!(set.contains(4), false);
     }
 
@@ -190,8 +191,8 @@ mod tests
 
         set.add(4, 1);
         set.add(7, 2);
+        set.delete(4);
 
-        assert_eq!(set.delete(4).unwrap(), 1);
         assert_eq!(set.contains(4), false);
         assert_eq!(*set.get(7).unwrap(), 2);
         assert_eq!(set.sparse[7].unwrap(), 0);
