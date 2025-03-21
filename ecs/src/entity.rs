@@ -23,7 +23,7 @@ impl<'a> EntityBuilder<'a>
             return self;
         }
         panic!(
-            "You cannot spawn an entity with id `{}` with unregistered type `{}`.",
+            "You cannot spawn an entity `{}` with unregistered type `{}`.",
             self.id,
             type_name::<T>()
         );

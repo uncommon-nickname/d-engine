@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 
-use crate::components::{ComponentStorage, SparseSet};
+use crate::components::{ComponentStorage, Entry, SparseSet};
 use crate::entity::EntityBuilder;
 
 pub struct World
@@ -37,15 +37,45 @@ impl World
             .for_each(|components| components.delete(id))
     }
 
+    pub fn for_each<T: 'static>(&self, mut f: impl FnMut(&T))
+    {
+        if let Some(storage) = self.get_storage::<T>()
+        {
+            storage.get_all().iter().for_each(|entry| f(&entry.item))
+        }
+    }
+
+    pub fn for_each_mut<T: 'static>(&mut self, mut f: impl FnMut(&mut T))
+    {
+        if let Some(storage) = self.get_storage_mut::<T>()
+        {
+            storage
+                .get_all_mut()
+                .iter_mut()
+                .for_each(|entry| f(&mut entry.item));
+        }
+    }
+
     pub fn get<T: 'static>(&self, id: usize) -> Option<&T>
     {
         self.get_storage::<T>().and_then(|storage| storage.get(id))
+    }
+
+    pub fn get_all<T: 'static>(&self) -> Option<&[Entry<T>]>
+    {
+        self.get_storage::<T>().map(|storage| storage.get_all())
     }
 
     pub fn get_mut<T: 'static>(&mut self, id: usize) -> Option<&mut T>
     {
         self.get_storage_mut::<T>()
             .and_then(|storage| storage.get_mut(id))
+    }
+
+    pub fn get_all_mut<T: 'static>(&mut self) -> Option<&mut [Entry<T>]>
+    {
+        self.get_storage_mut::<T>()
+            .map(|storage| storage.get_all_mut())
     }
 
     pub(crate) fn get_storage<T: 'static>(&self) -> Option<&SparseSet<T>>
@@ -121,6 +151,36 @@ mod tests
 
         assert!(v1.is_none());
         assert!(v2.is_none());
+    }
+
+    #[test]
+    fn for_each_entity_do_action()
+    {
+        let mut world = World::new(10).register::<u32>();
+
+        world.spawn().with::<u32>(1);
+        world.spawn().with::<u32>(2);
+        world.spawn().with::<u32>(3);
+
+        let mut cntr = 0;
+
+        world.for_each::<u32>(|item| cntr += *item);
+
+        assert_eq!(cntr, 6);
+    }
+
+    #[test]
+    fn for_each_mut_change_inplace()
+    {
+        let mut world = World::new(10).register::<u32>();
+
+        let first = world.spawn().with::<u32>(1).into_id();
+        let second = world.spawn().with::<u32>(2).into_id();
+
+        world.for_each_mut::<u32>(|item| *item *= 2);
+
+        assert_eq!(world.get::<u32>(first).unwrap(), &2);
+        assert_eq!(world.get::<u32>(second).unwrap(), &4);
     }
 
     #[test]

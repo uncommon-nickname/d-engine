@@ -67,6 +67,20 @@ impl<T> SparseSet<T>
         self.sparse.fill(None);
     }
 
+    pub fn get(&self, id: usize) -> Option<&T>
+    {
+        let index = self.sparse[id]?;
+        let entry = &self.dense[index];
+
+        Some(&entry.item)
+    }
+
+    #[inline]
+    pub fn get_all(&self) -> &[Entry<T>]
+    {
+        self.dense.as_slice()
+    }
+
     pub fn get_mut(&mut self, id: usize) -> Option<&mut T>
     {
         let index = self.sparse[id]?;
@@ -75,12 +89,10 @@ impl<T> SparseSet<T>
         Some(&mut entry.item)
     }
 
-    pub fn get(&self, id: usize) -> Option<&T>
+    #[inline]
+    pub fn get_all_mut(&mut self) -> &mut [Entry<T>]
     {
-        let index = self.sparse[id]?;
-        let entry = &self.dense[index];
-
-        Some(&entry.item)
+        self.dense.as_mut_slice()
     }
 
     pub fn size(&self) -> usize

@@ -10,10 +10,10 @@ pub trait ComponentStorage
 }
 
 #[derive(Debug)]
-struct Entry<T>
+pub struct Entry<T>
 {
-    id: usize,
-    item: T,
+    pub id: usize,
+    pub item: T,
 }
 
 #[derive(Debug)]
